@@ -17,7 +17,7 @@ exports.handleWhatsApp = async (req, res) => {
         // Forward to Python AI
         const aiRes = await axios.post('http://127.0.0.1:8000/chat', { 
             query: userMsg,
-            language: 'pg' // Test in Pidgin for Cameroon context
+            language: 'auto' // Test in Pidgin for Cameroon context
         });
 
         console.log("AI Answered:", aiRes.data.response);
@@ -44,7 +44,7 @@ exports.handleVoiceCall = async (req, res) => {
         input: 'speech',
         action: '/api/twilio/voice-respond',
         timeout: 5,
-        language: 'en-US',
+        language: 'auto',
     });
 
     gather.say("Welcome to MamaCare health support. Please describe your symptoms after the beep.");
