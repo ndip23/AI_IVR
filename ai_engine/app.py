@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 from pathlib import Path
+import traceback
 
 # LangChain Imports
 from langchain_community.vectorstores import FAISS
@@ -18,7 +19,7 @@ load_dotenv(dotenv_path=env_path)
 # transport='rest' is used for better stability on localhost/Windows
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"), transport='rest')
 
-# Corrected model version to 1.5-flash-latest
+# Using the version as per your requirement
 model = genai.GenerativeModel("gemini-2.5-flash")
 
 app = Flask(__name__)
@@ -88,7 +89,7 @@ def train_model():
         return jsonify({"error": str(e)}), 500
 
 # =========================
-# CHAT ENDPOINT (TRILINGUAL)
+# CHAT ENDPOINT (TRILINGUAL + AUTO)
 # =========================
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -97,18 +98,17 @@ def chat():
     
     # 1. Get query and language from request
     user_query = data.get('query')
-    # Default to 'en' if not provided (important for WhatsApp)
-    language = data.get('language', 'en') 
+    # Default to 'auto' to ensure intelligence across all platforms
+    language = data.get('language', 'auto') 
 
     print(f"\n--- New Chat Request ---")
     print(f"Query: {user_query}")
-    print(f"Language: {language}")
+    print(f"Language Strategy: {language}")
 
     if not user_query:
         return jsonify({"error": "Query is required"}), 400
 
     # 2. Locate the database folder using absolute paths
-    # This prevents the 'faiss_index not found' error
     current_dir = os.path.dirname(os.path.abspath(__file__))
     index_path = os.path.join(current_dir, "faiss_index")
 
@@ -131,16 +131,20 @@ def chat():
         context = "\n".join([f"- {doc.page_content}" for doc in docs])
         print(f"✅ Found {len(docs)} relevant medical facts.")
 
-        # 5. Configure Language and Tone Instructions
+        # 5. Configure Language and Tone Instructions (ADDED AUTO DETECTION)
         if language == 'fr':
             lang_instr = "Respond ONLY in French. Use a compassionate tone for a mother (Maman)."
             fallback = "Je suis désolé, je n'ai pas cette information médicale précise. Veuillez consulter un agent de santé communautaire."
         elif language == 'pg':
             lang_instr = "Respond ONLY in Cameroon Pidgin English. Use words like 'pikin', 'mami', 'hot body', 'don'. Be very clear."
             fallback = "Mami, I no get that information for here oh. Abeg see some community health worker for help you."
-        else:
+        elif language == 'en':
             lang_instr = "Respond ONLY in English. Be clear, friendly, and professional."
             fallback = "I'm sorry, I don't have that specific medical information. Please consult a community health worker."
+        else:
+            # ✅ THIS IS THE AUTO DETECTION LOGIC
+            lang_instr = "Detect the user's language and respond in that same language (English, French, or Cameroon Pidgin)."
+            fallback = "I don't know / Je ne sais pas / I no know."
 
         # 6. Build the Healthcare Prompt
         prompt = f"""
@@ -163,7 +167,6 @@ YOUR RESPONSE:
 """
 
         # 7. Generate AI Response using Gemini
-        # Verified model: gemini-1.5-flash-latest
         response = model.generate_content(prompt)
         
         # Clean the response text
@@ -176,11 +179,10 @@ YOUR RESPONSE:
         })
 
     except Exception as e:
-        # This will print the EXACT error in your Python terminal for debugging
         print("\n❌ CHAT ERROR:")
-        import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
 # =========================
 # RUN SERVER
 # =========================
